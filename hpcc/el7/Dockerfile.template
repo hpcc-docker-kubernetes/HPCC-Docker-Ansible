@@ -1,0 +1,13 @@
+FROM hpccsystems/linux:el7_<BASE_SUFFIX>
+MAINTAINER Xiaoming Wang <xiaoming.wang@lexisnexis.com>
+RUN yum update -y 
+RUN yum install -y  net-tools which
+RUN chmod u+s $(which ping)
+RUN wget <URL_BASE>/<PLATFORM_TYPE>-Candidate-<VERSION>/bin/platform/hpccsystems-platform-community_<FILE_NAME_SUFFIX>
+RUN yum install --nogpgcheck -y hpccsystems-platform-community_<FILE_NAME_SUFFIX>
+EXPOSE 8010 8002 8015 9876
+ADD hpcc-tools /opt/
+RUN chmod +x /opt/*.sh
+RUN chmod +x /opt/*.py
+RUN mkdir -p /var/run/sshd
+CMD ["bash", "-c",  "/usr/sbin/sshd -D"]

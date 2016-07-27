@@ -1,0 +1,9 @@
+# run as ansible-playbook start_hpcc.yaml --extra-vars "hosts=dali user=hpcc" 
+# run as ansible-playbook start_hpcc.yaml --extra-vars "hosts=non-dali user=hpcc" 
+---
+- name: Execute a script.
+  hosts: '{{ hosts }}'
+  remote_user: '{{ user }}'
+  tasks:
+     - name: Execute the script
+       command: bash /etc/init.d/hpcc-init start
