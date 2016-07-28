@@ -9,6 +9,7 @@ RUN wget <URL_BASE>/<PLATFORM_TYPE>-Candidate-<VERSION>/bin/platform/hpccsystems
 RUN groupadd hpcc
 RUN useradd -s /bin/bash -r -m -d /home/hpcc -g hpcc -c "hpcc Runtime User" hpcc
 RUN dpkg -i hpccsystems-platform-community_<FILE_NAME_SUFFIX>
+RUN cp -r /etc/HPCCSystems /etc/HPCCSystems.bk
 ADD hpcc-tools /opt/hpcc-tools
 RUN chmod +x /opt/hpcc-tools/*.sh
 RUN chmod +x /opt/hpcc-tools/*.py
