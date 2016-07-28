@@ -10,7 +10,7 @@ usage()
     echo "  -a <ansible config file>: If omitted the default is /etc/ansible/ansible.cfg"
     echo "  -c <cofig file>: <key>=<value> of the cluster configuration and HPCC products version, etc" 
     echo "  -d <directory>: contains node ips in files named as node types. For example,  "
-    echo "                  support, thor, roxie, etc"
+    echo "                  dali, support, thor, roxie, etc"
     echo "  -w <work dir>:  this will be ansible hosts directory. If omitted the -d value will be used"
     echo ""
     exit 1
