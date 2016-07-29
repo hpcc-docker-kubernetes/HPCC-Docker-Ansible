@@ -5,7 +5,7 @@ import json
 if len(sys.argv) > 1:
    fn = sys.argv[1]
 else:
-   fn = "pods.json"
+   fn = "/tmp/pods.json"
 
 with open(fn) as hpcc_pods:
     data = json.load(hpcc_pods)

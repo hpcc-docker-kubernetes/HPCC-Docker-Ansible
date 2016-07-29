@@ -13,6 +13,8 @@ usage()
    echo "  -p: HPCC project name: ce or ce-plugins. Default is ce"
    echo "  -s: base linux image tag suffix. The default is hpcc<major version>]."
    echo "      For xenial use hpcc6, the other use hpcc5."
+   echo "  -t: tag. By default it will use fullversion and codename"
+   echo "      It is useful to create \"latest\" tag "
    echo "  -v: full version. For example: 6.0.0-rc1 or 5.6.2-1"
    echo ""
    exit
@@ -29,7 +31,7 @@ template=
 hpcc_docker_dir=../HPCC-Docker-Ansible
 base_suffix=
 
-while getopts "*b:d:l:p:s:v:" arg
+while getopts "*b:d:l:p:s:t:v:" arg
 do
     case "$arg" in
        b) base_url="$OPTARG"
@@ -41,6 +43,8 @@ do
        p) project="$OPTARG"
           ;;
        s) base_suffix="$OPTARG"
+          ;;
+       t) tag="$OPTARG"
           ;;
        v) fullversion="$OPTARG"
           ;;
@@ -62,12 +66,12 @@ package_type
 case "$codename" in
    "el6" | "el7" )
      file_name_suffix="${fullversion}.${codename}.x86_64.rpm"
-     tag="${fullversion}.${codename}"
+     [ -z "$tag" ] && tag="${fullversion}.${codename}"
      package_type=rpm
      ;;
    "trusty" | "xenial" )
      file_name_suffix="${fullversion}${codename}_amd64.deb"
-     tag="${fullversion}${codename}"
+     [ -z "$tag" ] && tag="${fullversion}${codename}"
      package_type=deb
      ;;
     * ) echo "Unsupported codename $codename" 
