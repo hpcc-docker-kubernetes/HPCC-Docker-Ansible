@@ -13,6 +13,6 @@ RUN cp -r /etc/HPCCSystems /etc/HPCCSystems.bk
 ADD hpcc-tools /opt/hpcc-tools
 RUN chmod +x /opt/hpcc-tools/*.sh
 RUN chmod +x /opt/hpcc-tools/*.py
-RUN mkdir -p /var/run/sshd
 RUN cp -r /home/hpcc/.ssh ~/
+RUN mkdir -p /var/run/sshd
 CMD ["bash", "-c", "set -e && sudo /usr/sbin/sshd -D"]
