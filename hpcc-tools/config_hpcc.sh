@@ -102,6 +102,9 @@ ${SCRIPT_DIR}/ansible/setup.sh -d /tmp/ips -c /tmp/hpcc.conf
 export ANSIBLE_HOST_KEY_CHECKING=False
 
 
+[ "$1" = "setup" ] && exit 0 
+
+
 dali_ip=$(cat /etc/ansible/ips/dali)
 thor_ips=/etc/ansible/ips/thor
 
