@@ -2,30 +2,6 @@
 
 SCRIPT_DIR=$(dirname $0)
 
-function get_roxie_ips()
-{
-   max_index=${MAX_ROXIE_INDEX}
-   [ -z "$max_index" ] && max_index=20
-   touch roxie_ips.txt
-   for i in $(seq 1 $max_index)
-   do
-      ip=$(getent hosts hpcc-roxie_${i} | cut -d' ' -f1)
-      [ -n "$ip" ] && echo "${ip}" >> roxie_ips.txt
-   done
-}
-
-function get_thor_ips()
-{
-   max_index=${MAX_THOR_INDEX}
-   [ -z "$max_index" ] && max_index=20
-   touch thor_ips.txt
-   for i in $(seq 1 $max_index)
-   do
-      ip=$(getent hosts hpcc-thor_${i} | cut -d' ' -f1)
-      [ -n "$ip" ] && echo "${ip}" >> thor_ips.txt
-   done
-}
-
 function create_ips_string()
 {
    IPS=
@@ -33,8 +9,45 @@ function create_ips_string()
    while read ip
    do
       ip=$(echo $ip | sed 's/[[:space:]]//g') 
-      [ -n "$ip" ] && IPS="${IPS}${ip}\;"
+      [ -n "$ip" ] && IPS="${IPS}${ip}\\;"
    done < $1
+}
+
+function create_envxml()
+{
+   [ -e ${roxie_ips} ] && roxie_nodes=$(cat ${roxie_ips} | wc -l)
+   [ -e ${esp_ips} ] && esp_nodes=$(cat ${esp_ips} | wc -l)
+   [ -z "$roxie_nodes" ] && roxie_nodes=0
+   [ -z "$esp_nodes" ] && esp_nodes=0
+
+   cmd="$SUDOCMD ${HPCC_HOME}/sbin/envgen -env ${CONFIG_DIR}/${ENV_XML_FILE}   \
+       -override roxie,@roxieMulticastEnabled,false -override thor,@replicateOutputs,true \
+       -override esp,@method,htpasswd -override thor,@replicateAsync,true                 \
+       -thornodes ${thor_nodes} -slavesPerNode ${slaves_per_node} -espnodes ${esp_nodes}  \
+       -roxienodes ${roxie_nodes} -supportnodes ${support_nodes} -roxieondemand 1" 
+
+    cmd="$cmd -ip $dali_ip" 
+    if [ $thor_nodes -gt 0 ]
+    then
+       create_ips_string ${thor_ips}
+       cmd="$cmd -assign_ips thor ${dali_ip}\;${IPS}"
+    fi
+
+    if [ $roxie_nodes -gt 0 ]
+    then
+       create_ips_string ${roxie_ips}
+       cmd="$cmd -assign_ips roxie $IPS"
+    fi
+
+    if [ $esp_nodes -gt 0 ]
+    then
+       create_ips_string ${esp_ips}
+       cmd="$cmd -assign_ips esp $IPS"
+    fi
+
+    echo "$cmd" 
+    eval "$cmd"
+
 }
 
 #------------------------------------------
@@ -47,7 +60,7 @@ SUDOCMD=
 #------------------------------------------
 # LOG
 #
-LOG_FILE=/tmp/run_master.log
+LOG_FILE=/tmp/config_hpcc.log
 touch ${LOG_FILE}
 exec 2>$LOG_FILE
 set -x
@@ -65,88 +78,136 @@ ps -efa | grep -v sshd |  grep -q sshd
 
 if [ -z "$1" ] || [ "$1" != "-x" ]
 then
-   if [ -z "${KUBERNETES_SERVICE_HOST}" ]
-   then
-      grep -e "[[:space:]]hpcc-thor_[[:digit:]][[:digit:]]*" /etc/hosts | awk '{print $1}' > thor_ips.txt
-      grep -e "[[:space:]]hpcc-roxie_[[:digit:]][[:digit:]]*" /etc/hosts | awk '{print $1}' > roxie_ips.txt
-      # If no thor and roxie wroten to /etc/hosts "links" setting in docker-compose.yml probably doesn't work 
-      # For work-around we just iterate with "getent".
-      if [ ! -s thor_ips.txt ] &&  [ ! -s roxie_ips.txt ]  
-      then
-          get_roxie_ips
-          get_thor_ips
-      fi
-
-      local_ip=$(ifconfig eth0 | sed -n "s/.*inet addr:\(.*\)/\1/p" | awk '{print $1}')
-      [ -z "$local_ip" ] && local_ip=$(ifconfig eth0 | sed -n "s/.*inet \(.*\)/\1/p" | awk '{print $1}')
-      echo "$local_ip"  > ips.txt
-   else
-      ${SCRIPT_DIR}/get_ips.sh
-      ${SCRIPT_DIR}/get_ips.py
-   fi
+   trials=3
+    while [ $trials -gt 0 ]
+    do
+       ${SCRIPT_DIR}/get_ips.sh
+       ${SCRIPT_DIR}/get_ips.py
+       [ $? -eq 0 ] && break  
+       trials=$(expr $trials \- 1)
+       sleep 5
+    done
 fi
 
-cat roxie_ips.txt >> ips.txt
-cat thor_ips.txt >> ips.txt
-#cat ips.txt
+#------------------------------------------
+# Create HPCC components file
+#
+hpcc_config=$(ls /tmp/ips | tr '\n' ',')
+echo "cluster_node_types=${hpcc_config%,}" > /tmp/hpcc.conf
+
+#------------------------------------------
+# Setup Ansible hosts
+#
+${SCRIPT_DIR}/ansible/setup.sh -d /tmp/ips -c /tmp/hpcc.conf
+export ANSIBLE_HOST_KEY_CHECKING=False
+
+
+dali_ip=$(cat /etc/ansible/ips/dali)
+thor_ips=/etc/ansible/ips/thor
+
+#------------------------------------------
+# Restore HPCC configuration files /etc/HPCCSystems
+# which is NFS share
+#
+if [ ! -e /etc/HPCCSystems/environment.conf ]; then
+   cp -r /etc/HPCCSystems.bk/* /etc/HPCCSystems/ 
+   chown -R hpcc:hpcc /etc/HPCCSystems/
+fi
+
+if [ ! -e /etc/HPCCSystems_Roxie/environment.conf ]; then
+   cp -r /etc/HPCCSystems.bk/* /etc/HPCCSystems_Roxie/ 
+   chown -R hpcc:hpcc /etc/HPCCSystems_Roxie
+fi
+
+if [ ! -e /etc/HPCCSystems_Esp/environment.conf ]; then
+   cp -r /etc/HPCCSystems.bk/* /etc/HPCCSystems_Esp/ 
+   chown -R hpcc:hpcc /etc/HPCCSystems_Esp
+fi
+
+
+#------------------------------------------
+# Stop HPCC on all nodes
+#
+ansible-playbook /opt/hpcc-tools/ansible/stop_hpcc.yaml --extra-vars "hosts=non-dali" 
+ansible-playbook /opt/hpcc-tools/ansible/stop_hpcc.yaml --extra-vars "hosts=dali" 
 
 
 #------------------------------------------
 # Parameters to envgen
 #
 HPCC_HOME=/opt/HPCCSystems
-CONFIG_DIR=/etc/HPCCSystems
 ENV_XML_FILE=environment.xml
-IP_FILE=ips.txt
-thor_nodes=$(cat thor_ips.txt | wc -l)
-roxie_nodes=$(cat roxie_ips.txt | wc -l)
+
+
+[ -e ${thor_ips} ] && thor_nodes=$(cat ${thor_ips} | wc -l)
 support_nodes=1
 slaves_per_node=1
 [ -n "$SLAVES_PER_NODE" ] && slaves_per_node=${SLAVES_PER_NODE}
 [ -z "$thor_nodes" ] && thor_nodes=0
-[ -z "$roxie_nodes" ] && roxie_nodes=0
 
-create_ips_string roxie_ips.txt
-roxie_ips="roxie $IPS"
-
-cmd="$SUDOCMD ${HPCC_HOME}/sbin/envgen -env ${CONFIG_DIR}/${ENV_XML_FILE}   \
--override roxie,@roxieMulticastEnabled,false -override thor,@replicateOutputs,true \
--override esp,@method,htpasswd -override thor,@replicateAsync,true                  \
--thornodes ${thor_nodes} -slavesPerNode ${slaves_per_node}       \
--roxienodes ${roxie_nodes} -supportnodes ${support_nodes} -roxieondemand 1" 
-
-HPCC_VERSION=$(${HPCC_HOME}/bin/eclcc --version | cut -d' ' -f1)
-HPCC_MAJOR=${HPCC_VERSION%%.*}
-if [ $HPCC_MAJOR -gt 5 ]
+#------------------------------------------
+# Get load balancer ips for roxie and esp
+#
+lb_ips=/etc/ansible/lb-ips 
+[ ! -d ${lb_ips} ] && cp -r  /etc/ansible/ips $lb_ips 
+if [ -e ${lb_ips}/roxie ] 
 then
-    cmd="$cmd -ip $local_ip" 
-    if [ $thor_nodes -gt 0 ]
-    then
-       create_ips_string thor_ips.txt
-       cmd="$cmd -assign_ips thor ${local_ip}\;${IPS}"
-    fi
-
-    if [ $roxie_nodes -gt 0 ]
-    then
-       create_ips_string roxie_ips.txt
-       cmd="$cmd -assign_ips roxie $IPS"
-    fi
-else
-    cmd="$cmd -ipfile ${IP_FILE}" 
+  if [ $NUM_ROXIE_LB -gt 0 ] 
+  then
+     rm -rf  ${lb_ips}/roxie ] 
+     touch  ${lb_ips}/roxie ] 
+     for i in $(seq 1 $NUM_ROXIE_LB)
+     do
+        lb_ip=ROXIE${i}_SERVICE_HOST
+        eval lb_ip=\$$lb_ip
+        [ -n "$lb_ip" ] && echo  ${lb_ip} >> ${lb_ips}/roxie
+     done
+  fi
 fi
 
-#------------------------------------------
-# Generate environment.xml
-#
-echo "$cmd" 
-eval "$cmd"
+
+[ -e ${lb_ips}/esp ] && [ -n "$ESP_SERVICE_HOST" ] && echo  ${ESP_SERVICE_HOST} > ${lb_ips}/esp
 
 #------------------------------------------
-# Transfer environment.xml to cluster 
-# containers
+# Generate environment for all nodes with
+# roxie and esp load balancer ips
 #
-$SUDOCMD   su - hpcc -c "/opt/HPCCSystems/sbin/hpcc-push.sh \
--s /etc/HPCCSystems/environment.xml -t /etc/HPCCSystems/environment.xml -x"
+CONFIG_DIR=/etc/HPCCSystems
+roxie_ips=${lb_ips}/roxie
+esp_ips=${lb_ips}/esp
+create_envxml
+chown -R hpcc:hpcc $CONFIG_DIR
+
+#------------------------------------------
+# Generate environment for all real ips
+#
+esp_ips=/etc/ansible/ips/esp
+roxie_ips=/etc/ansible/ips/roxie
+CONFIG_DIR=/etc/HPCCSystems/real
+[ ! -d $CONFIG_DIR ] && cp -r /etc/HPCCSystems.bk $CONFIG_DIR
+create_envxml
+chown -R hpcc:hpcc $CONFIG_DIR
+CONFIG_DIR=/etc/HPCCSystems
+
+#------------------------------------------
+# Createe environment roxie
+#
+CONFIG_DIR=/etc/HPCCSystems_Roxie
+cp -r /etc/HPCCSystems/* ${CONFIG_DIR}/
+if [ $NUM_ROXIE_LB -gt 0 ] && [ -n "$ROXIE1_SERVICE_HOST" ]; then
+  sed  "s/${ROXIE1_SERVICE_HOST}/localhost/g"  /etc/HPCCSystems/environment.xml > ${CONFIG_DIR}/environment.xml
+fi
+chown -R hpcc:hpcc $CONFIG_DIR
+
+#------------------------------------------
+# Createe environment esp
+#
+CONFIG_DIR=/etc/HPCCSystems_Esp
+cp -r /etc/HPCCSystems/* ${CONFIG_DIR}/
+if [ -n "$ESP_SERVICE_HOST" ]; then
+  sed  "s/${ESP_SERVICE_HOST}/localhost/g"  /etc/HPCCSystems/environment.xml > ${CONFIG_DIR}/environment.xml
+fi
+chown -R hpcc:hpcc $CONFIG_DIR
 
 #------------------------------------------
 # Start hpcc 
@@ -155,8 +216,12 @@ $SUDOCMD   su - hpcc -c "/opt/HPCCSystems/sbin/hpcc-push.sh \
 # Should fix it in Platform code to use id instead of $USER
 # Need stop first since if add contaners other thor and roxie containers are already up.
 # Force them to read environemnt.xml by stop and start
-$SUDOCMD su - hpcc -c  "${HPCC_HOME}/sbin/hpcc-run.sh stop"
-$SUDOCMD su - hpcc -c  "${HPCC_HOME}/sbin/hpcc-run.sh start"
+#$SUDOCMD su - hpcc -c  "${HPCC_HOME}/sbin/hpcc-run.sh stop"
+#$SUDOCMD su - hpcc -c  "${HPCC_HOME}/sbin/hpcc-run.sh start"
+
+ansible-playbook /opt/hpcc-tools/ansible/start_hpcc.yaml --extra-vars "hosts=dali" 
+ansible-playbook /opt/hpcc-tools/ansible/start_hpcc.yaml --extra-vars "hosts=non-dali" 
+
 
 
 set +x

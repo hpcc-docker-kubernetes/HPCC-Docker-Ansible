@@ -10,7 +10,7 @@ usage()
     echo "  -a <ansible config file>: If omitted the default is /etc/ansible/ansible.cfg"
     echo "  -c <cofig file>: <key>=<value> of the cluster configuration and HPCC products version, etc" 
     echo "  -d <directory>: contains node ips in files named as node types. For example,  "
-    echo "                  support, thor, roxie, etc"
+    echo "                  dali, support, thor, roxie, etc"
     echo "  -w <work dir>:  this will be ansible hosts directory. If omitted the -d value will be used"
     echo ""
     exit 1
@@ -31,7 +31,7 @@ disable_host_key_check()
 
 add_ips_to_hosts_file()
 {
-   echo "node_type: $node_type"
+   echo "$node_type :"
    #distro_name=$(cat ${ip_files_dir}/${node_type} | head -n 1 | sed 's/[[:space:]]//g'))  
    [ -s ${ANSIBLE_HOSTS_FILE} ] && echo "" >> ${ANSIBLE_HOSTS_FILE}
    i=0  
@@ -46,7 +46,9 @@ add_ips_to_hosts_file()
        ansible_ip=$(echo $ip | sed 's/\([[:digit:]]*\)-\([[:digit:]]*\)/\[\1:\2\]/g')
        [ $i -eq 0 ] && echo "[${node_type}]" >> ${ANSIBLE_HOSTS_FILE} 
        echo "$ip" >> ${ANSIBLE_HOSTS_FILE} 
-       echo "${ip};" >>  ${HPCC_IPS_DIR}/${node_type}
+       #When input ip files ready need add ';'
+       #echo "${ip};" >>  ${HPCC_IPS_DIR}/${node_type}
+       echo "${ip}" >>  ${HPCC_IPS_DIR}/${node_type}
        i=$(expr $i \+ 1)
    done < ${ip_files_dir}/${node_type}  
    if [ $i -gt 0 ]
@@ -92,7 +94,7 @@ hosts_dir=/etc/ansible
 config_file=
 ansible_config_file=/etc/ansible/ansible.cfg
 
-while getopts "*hc:d:w:" arg
+while getopts "*ha:c:d:w:" arg
 do
     case "$arg" in
        a) ansible_config_file="$OPTARG"
@@ -117,6 +119,7 @@ fi
 [ -z "$hosts_dir" ] && hosts_dir=$ip_files_dir  
 
 disable_host_key_check
+touch ~/.ssh/known_hosts
 
 #
 # Preperation
@@ -167,7 +170,7 @@ do
 done
 
 echo "" >> ${ANSIBLE_HOSTS_FILE} 
-echo "[non-dali]" >> ${ANSIBLE_HOSTS_FILE} 
+echo "[non-dali:children]" >> ${ANSIBLE_HOSTS_FILE} 
 for node_type in $(echo ${cluster_node_types} | sed 's/,/ /g')
 do
     case "$node_type" in
@@ -177,3 +180,7 @@ do
     esac
 done
 
+echo "" >> ${ANSIBLE_HOSTS_FILE} 
+echo "[hpcc:children]" >> ${ANSIBLE_HOSTS_FILE} 
+echo "dali" >> ${ANSIBLE_HOSTS_FILE} 
+echo "non-dali" >> ${ANSIBLE_HOSTS_FILE} 
