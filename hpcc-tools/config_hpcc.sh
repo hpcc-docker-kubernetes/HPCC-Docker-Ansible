@@ -102,9 +102,6 @@ ${SCRIPT_DIR}/ansible/setup.sh -d /tmp/ips -c /tmp/hpcc.conf
 export ANSIBLE_HOST_KEY_CHECKING=False
 
 
-[ "$1" = "setup" ] && exit 0 
-
-
 dali_ip=$(cat /etc/ansible/ips/dali)
 thor_ips=/etc/ansible/ips/thor
 
@@ -153,7 +150,22 @@ slaves_per_node=1
 #
 lb_ips=/etc/ansible/lb-ips 
 [ ! -d ${lb_ips} ] && cp -r  /etc/ansible/ips $lb_ips 
-[ -e ${lb_ips}/roxie ] && [ -n "$ROXIE_SERVICE_HOST" ] && echo  ${ROXIE_SERVICE_HOST} > ${lb_ips}/roxie
+if [ -e ${lb_ips}/roxie ] 
+then
+  if [ $NUM_ROXIE_LB -gt 0 ] 
+  then
+     rm -rf  ${lb_ips}/roxie ] 
+     touch  ${lb_ips}/roxie ] 
+     for i in $(seq 1 $NUM_ROXIE_LB)
+     do
+        lb_ip=ROXIE${i}_SERVICE_HOST
+        eval lb_ip=\$$lb_ip
+        [ -n "$lb_ip" ] && echo  ${lb_ip} >> ${lb_ips}/roxie
+     done
+  fi
+fi
+
+
 [ -e ${lb_ips}/esp ] && [ -n "$ESP_SERVICE_HOST" ] && echo  ${ESP_SERVICE_HOST} > ${lb_ips}/esp
 
 #------------------------------------------
@@ -182,8 +194,8 @@ CONFIG_DIR=/etc/HPCCSystems
 #
 CONFIG_DIR=/etc/HPCCSystems_Roxie
 cp -r /etc/HPCCSystems/* ${CONFIG_DIR}/
-if [ -n "$ROXIE_SERVICE_HOST" ]; then
-  sed  "s/${ROXIE_SERVICE_HOST}/localhost/g"  /etc/HPCCSystems/environment.xml > ${CONFIG_DIR}/environment.xml
+if [ $NUM_ROXIE_LB -gt 0 ] && [ -n "$ROXIE1_SERVICE_HOST" ]; then
+  sed  "s/${ROXIE1_SERVICE_HOST}/localhost/g"  /etc/HPCCSystems/environment.xml > ${CONFIG_DIR}/environment.xml
 fi
 chown -R hpcc:hpcc $CONFIG_DIR
 
