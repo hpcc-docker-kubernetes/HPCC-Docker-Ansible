@@ -124,6 +124,10 @@ if [ ! -e /etc/HPCCSystems_Esp/environment.conf ]; then
    chown -R hpcc:hpcc /etc/HPCCSystems_Esp
 fi
 
+#------------------------------------------
+# Make sure shared directory /var/lib/HPCCSystems/hpcc-data owned by hpcc
+#
+ansible-playbook /opt/hpcc-tools/ansible/set_hpcc_owner.yaml --extra-vars "hosts=roxie"
 
 #------------------------------------------
 # Stop HPCC on all nodes
@@ -154,8 +158,8 @@ if [ -e ${lb_ips}/roxie ]
 then
   if [ $NUM_ROXIE_LB -gt 0 ] 
   then
-     rm -rf  ${lb_ips}/roxie ] 
-     touch  ${lb_ips}/roxie ] 
+     rm -rf  ${lb_ips}/roxie  
+     touch  ${lb_ips}/roxie  
      for i in $(seq 1 $NUM_ROXIE_LB)
      do
         lb_ip=ROXIE${i}_SERVICE_HOST
