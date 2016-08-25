@@ -28,7 +28,7 @@ codename=
 project=ce
 tag=
 template=
-hpcc_docker_dir=../HPCC-Docker-Ansible
+hpcc_docker_dir=$SCRIPT_DIR
 base_suffix=
 
 while getopts "*b:d:l:p:s:t:v:" arg
