@@ -26,6 +26,12 @@ function create_envxml()
        -thornodes ${thor_nodes} -slavesPerNode ${slaves_per_node} -espnodes ${esp_nodes}  \
        -roxienodes ${roxie_nodes} -supportnodes ${support_nodes} -roxieondemand 1" 
 
+    if [ -n "$1" ]
+    then
+       #dafilesrv
+       cmd="$cmd -assign_ips $1 ." 
+    fi
+
     cmd="$cmd -ip $dali_ip" 
     if [ $thor_nodes -gt 0 ]
     then
@@ -103,7 +109,6 @@ export ANSIBLE_HOST_KEY_CHECKING=False
 
 
 dali_ip=$(cat /etc/ansible/ips/dali)
-thor_ips=/etc/ansible/ips/thor
 
 #------------------------------------------
 # Restore HPCC configuration files /etc/HPCCSystems
@@ -124,6 +129,11 @@ if [ ! -e /etc/HPCCSystems_Esp/environment.conf ]; then
    chown -R hpcc:hpcc /etc/HPCCSystems_Esp
 fi
 
+if [ ! -e /etc/HPCCSystems_Thor/environment.conf ]; then
+   cp -r /etc/HPCCSystems.bk/* /etc/HPCCSystems_Thor/ 
+   chown -R hpcc:hpcc /etc/HPCCSystems_Thor
+fi
+
 #------------------------------------------
 # Make sure shared directory /var/lib/HPCCSystems/hpcc-data owned by hpcc
 #
@@ -134,20 +144,6 @@ ansible-playbook /opt/hpcc-tools/ansible/set_hpcc_owner.yaml --extra-vars "hosts
 #
 ansible-playbook /opt/hpcc-tools/ansible/stop_hpcc.yaml --extra-vars "hosts=non-dali" 
 ansible-playbook /opt/hpcc-tools/ansible/stop_hpcc.yaml --extra-vars "hosts=dali" 
-
-
-#------------------------------------------
-# Parameters to envgen
-#
-HPCC_HOME=/opt/HPCCSystems
-ENV_XML_FILE=environment.xml
-
-
-[ -e ${thor_ips} ] && thor_nodes=$(cat ${thor_ips} | wc -l)
-support_nodes=1
-slaves_per_node=1
-[ -n "$SLAVES_PER_NODE" ] && slaves_per_node=${SLAVES_PER_NODE}
-[ -z "$thor_nodes" ] && thor_nodes=0
 
 #------------------------------------------
 # Get load balancer ips for roxie and esp
@@ -169,8 +165,43 @@ then
   fi
 fi
 
+if [ -e ${lb_ips}/thor ] 
+then
+  if [ -n "$NUM_THOR_SV" ] && [ $NUM_THOR_SV -gt 0 ] 
+  then
+     rm -rf  ${lb_ips}/thor
+     touch  ${lb_ips}/thor
+     for i in $(seq 1 $NUM_THOR_SV)
+     do
+        padded_index=$(printf "%04d" $i)
+        lb_ip=THOR${padded_index}_SERVICE_HOST
+        eval lb_ip=\$$lb_ip
+        [ -n "$lb_ip" ] && echo  ${lb_ip} >> ${lb_ips}/thor
+     done
+  fi
+fi
 
 [ -e ${lb_ips}/esp ] && [ -n "$ESP_SERVICE_HOST" ] && echo  ${ESP_SERVICE_HOST} > ${lb_ips}/esp
+
+
+#------------------------------------------
+# Parameters to envgen
+#
+HPCC_HOME=/opt/HPCCSystems
+ENV_XML_FILE=environment.xml
+
+if [ -n "$NUM_THOR_SV" ] && [ $NUM_THOR_SV -gt 0 ] 
+then
+  thor_ips=/etc/ansible/lb-ips/thor 
+else
+  thor_ips=/etc/ansible/ips/thor
+fi
+
+[ -e ${thor_ips} ] && thor_nodes=$(cat ${thor_ips} | wc -l)
+support_nodes=1
+slaves_per_node=1
+[ -n "$SLAVES_PER_NODE" ] && slaves_per_node=${SLAVES_PER_NODE}
+[ -z "$thor_nodes" ] && thor_nodes=0
 
 #------------------------------------------
 # Generate environment for all nodes with
@@ -179,19 +210,10 @@ fi
 CONFIG_DIR=/etc/HPCCSystems
 roxie_ips=${lb_ips}/roxie
 esp_ips=${lb_ips}/esp
+
 create_envxml
 chown -R hpcc:hpcc $CONFIG_DIR
 
-#------------------------------------------
-# Generate environment for all real ips
-#
-esp_ips=/etc/ansible/ips/esp
-roxie_ips=/etc/ansible/ips/roxie
-CONFIG_DIR=/etc/HPCCSystems/real
-[ ! -d $CONFIG_DIR ] && cp -r /etc/HPCCSystems.bk $CONFIG_DIR
-create_envxml
-chown -R hpcc:hpcc $CONFIG_DIR
-CONFIG_DIR=/etc/HPCCSystems
 
 #------------------------------------------
 # Createe environment roxie
@@ -214,6 +236,29 @@ fi
 chown -R hpcc:hpcc $CONFIG_DIR
 
 #------------------------------------------
+# Createe environment thor
+#
+if [ -n "$NUM_THOR_SV" ] && [ $NUM_THOR_SV -gt 0 ] 
+then
+   CONFIG_DIR=/etc/HPCCSystems_Thor
+   cp -r /etc/HPCCSystems/* ${CONFIG_DIR}/
+   create_envxml dafilesrv
+   chown -R hpcc:hpcc $CONFIG_DIR
+fi
+
+#------------------------------------------
+# Generate environment for all real ips
+#
+esp_ips=/etc/ansible/ips/esp
+roxie_ips=/etc/ansible/ips/roxie
+thor_ips=/etc/ansible/ips/thor
+CONFIG_DIR=/etc/HPCCSystems/real
+[ ! -d $CONFIG_DIR ] && cp -r /etc/HPCCSystems.bk $CONFIG_DIR
+create_envxml
+chown -R hpcc:hpcc $CONFIG_DIR
+CONFIG_DIR=/etc/HPCCSystems
+
+#------------------------------------------
 # Start hpcc 
 #
 # Need force to use sudo for now since $USER is not defined:
@@ -225,8 +270,6 @@ chown -R hpcc:hpcc $CONFIG_DIR
 
 ansible-playbook /opt/hpcc-tools/ansible/start_hpcc.yaml --extra-vars "hosts=dali" 
 ansible-playbook /opt/hpcc-tools/ansible/start_hpcc.yaml --extra-vars "hosts=non-dali" 
-
-
 
 set +x
 $SUDOCMD /opt/HPCCSystems/sbin/configgen -env /etc/HPCCSystems/environment.xml -listall2
