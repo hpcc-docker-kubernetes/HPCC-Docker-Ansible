@@ -1,0 +1,8 @@
+# run as ansible-playbook refresh_dali.yaml --extra-vars "hosts=dali" 
+---
+- name: Execute a script.
+  hosts: '{{ hosts }}'
+  remote_user: 'root'
+  tasks:
+     - name: Execute the script
+       command: bash /opt/HPCCSystems/bin/updtdalienv /etc/HPCCSystems/environment.xml
