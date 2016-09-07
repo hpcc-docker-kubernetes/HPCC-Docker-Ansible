@@ -98,19 +98,24 @@ function restore_hpcc_config()
     chown -R hpcc:hpcc /etc/HPCCSystems/
   fi
 
-  if [ ! -e /etc/HPCCSystems_Roxie/environment.conf ]; then
-    cp -r /etc/HPCCSystems.bk/* /etc/HPCCSystems_Roxie/ 
-    chown -R hpcc:hpcc /etc/HPCCSystems_Roxie
+  if [ $NUM_ROXIE_LB -gt 0 ]; then 
+    for i in $(seq 1 ${NUM_ROXIE_LB}) 
+    do
+      if [ ! -e /etc/HPCCSystems/roxie/${i}/environment.conf ]; then
+        cp -r /etc/HPCCSystems.bk/* /etc/HPCCSystems/roxie/${i}/ 
+        chown -R hpcc:hpcc /etc/HPCCSystems/roxie/${i}
+      fi
+    done
   fi
 
-  if [ ! -e /etc/HPCCSystems_Esp/environment.conf ]; then
-    cp -r /etc/HPCCSystems.bk/* /etc/HPCCSystems_Esp/ 
-    chown -R hpcc:hpcc /etc/HPCCSystems_Esp
+  if [ ! -e /etc/HPCCSystems/esp/environment.conf ]; then
+    cp -r /etc/HPCCSystems.bk/* /etc/HPCCSystems/esp/ 
+    chown -R hpcc:hpcc /etc/HPCCSystems/esp
   fi
 
-  if [ ! -e /etc/HPCCSystems_Thor/environment.conf ]; then
-    cp -r /etc/HPCCSystems.bk/* /etc/HPCCSystems_Thor/ 
-    chown -R hpcc:hpcc /etc/HPCCSystems_Thor
+  if [  -d /etc/HPCCSystems/thor ] && [ ! -e /etc/HPCCSystems/thor/environment.conf ]; then
+    cp -r /etc/HPCCSystems.bk/* /etc/HPCCSystems/thor/ 
+    chown -R hpcc:hpcc /etc/HPCCSystems/thor
   fi
 }
 
@@ -215,8 +220,8 @@ function create_envxml_for_thor()
 {
   if [ -n "$NUM_THOR_SV" ] && [ $NUM_THOR_SV -gt 0 ] 
   then
-    CONFIG_DIR=/etc/HPCCSystems_Thor
-    cp -r /etc/HPCCSystems/* ${CONFIG_DIR}/
+    CONFIG_DIR=/etc/HPCCSystems/thor
+    cp  /etc/HPCCSystems/environment.xml ${CONFIG_DIR}/
     create_envxml dafilesrv
     chown -R hpcc:hpcc $CONFIG_DIR
  fi
@@ -224,8 +229,8 @@ function create_envxml_for_thor()
 
 function create_envxml_for_esp()
 {
-  CONFIG_DIR=/etc/HPCCSystems_Esp
-  cp -r /etc/HPCCSystems/* ${CONFIG_DIR}/
+  CONFIG_DIR=/etc/HPCCSystems/esp
+  cp  /etc/HPCCSystems/environment.xml ${CONFIG_DIR}/
   if [ -n "$ESP_SERVICE_HOST" ]; then
     sed  "s/${ESP_SERVICE_HOST}/localhost/g"  /etc/HPCCSystems/environment.xml > ${CONFIG_DIR}/environment.xml
   fi
@@ -234,12 +239,21 @@ function create_envxml_for_esp()
 
 function create_envxml_for_roxie()
 {
-  CONFIG_DIR=/etc/HPCCSystems_Roxie
-  cp -r /etc/HPCCSystems/* ${CONFIG_DIR}/
-  if [ $NUM_ROXIE_LB -gt 0 ] && [ -n "$ROXIE1_SERVICE_HOST" ]; then
-    sed  "s/${ROXIE1_SERVICE_HOST}/localhost/g"  /etc/HPCCSystems/environment.xml > ${CONFIG_DIR}/environment.xml
+  if [ -z "$NUM_ROXIE_LB" ] || [ $NUM_ROXIE_LB -le 0 ] 
+  then  
+    cp -r /etc/HPCCSystems/environment.xml /etc/HPCCSystems/roxie/
+    chown hpcc:hpcc /etc/HPCCSystems/roxie/environment.xml
+    return
   fi
-  chown -R hpcc:hpcc $CONFIG_DIR
+
+  for i in $(seq 1 ${NUM_ROXIE_LB}) 
+  do
+    CONFIG_DIR=/etc/HPCCSystems/roxie/${i}
+    cur_roxie_lb=ROXIE${i}_SERVICE_HOST 
+    eval cur_roxie_lb=\$$cur_roxie_lb
+    sed  "s/${cur_roxie_lb}/localhost/g"  /etc/HPCCSystems/environment.xml > ${CONFIG_DIR}/environment.xml
+    chown -R hpcc:hpcc $CONFIG_DIR
+  done
 }
 
 #------------------------------------------
@@ -259,7 +273,6 @@ LOG_FILE=${LOG_DIR}/config_hpcc_${LONG_DATE}.log
 touch ${LOG_FILE}
 exec 2>$LOG_FILE
 set -x
-
 
 update=0
 while getopts "*hu" arg
@@ -303,9 +316,6 @@ setup_ansible_hosts
 dali_ip=$(cat /etc/ansible/ips/dali)
 
 
-#------------------------------------------
-# Create enviroment.xml
-#
 if [ $update -eq 0 ]
 then
   restore_hpcc_config
@@ -326,21 +336,15 @@ fi
 
 create_envxml_with_real_ips
 
-#------------------------------------------
-# Start HPCC
-#
 if [ $update -eq 0 ]
 then
    start_hpcc
 else
-  ansible-playbook /opt/hpcc-tools/ansible/restart_thor.yaml --extra-vars "hosts=dali" 
+  ansible-playbook /opt/hpcc-tools/ansible/start_thor.yaml --extra-vars "hosts=dali" 
   ansible-playbook /opt/hpcc-tools/ansible/refresh_dali.yaml --extra-vars "hosts=dali" 
 fi
 
 
-#------------------------------------------
-# Display HPCC cluster components
-#
 set +x
 echo "$SUDOCMD /opt/HPCCSystems/sbin/configgen -env /etc/HPCCSystems/environment.xml -listall2"
 $SUDOCMD /opt/HPCCSystems/sbin/configgen -env /etc/HPCCSystems/environment.xml -listall2
