@@ -1,0 +1,4 @@
+#!/bin/bash
+HPCC_MGR=/var/lib/hpcc_manager
+mkdir -p $HPCC_MGR
+touch ${HPCC_MGR}/enabled

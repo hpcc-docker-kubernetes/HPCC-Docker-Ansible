@@ -1,0 +1,3 @@
+#!/bin/bash
+HPCC_MGR=/var/lib/hpcc_manager
+[ -e ${HPCC_MGR}/enabled ] && rm -f ${HPCC_MGR}/enabled
