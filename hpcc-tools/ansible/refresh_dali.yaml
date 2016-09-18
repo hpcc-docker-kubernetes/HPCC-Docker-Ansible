@@ -1,8 +1,8 @@
-# run as ansible-playbook refresh_dali.yaml --extra-vars "hosts=dali" 
+# run as ansible-playbook refresh_dali.yaml" 
 ---
 - name: Execute a script.
-  hosts: '{{ hosts }}'
+  hosts: 'dali'
   remote_user: 'root'
   tasks:
      - name: Execute the script
-       command: bash /opt/HPCCSystems/bin/updtdalienv /etc/HPCCSystems/environment.xml
+       command: rm -rf /var/lib/HPCCSystems/myroxie/uslaves

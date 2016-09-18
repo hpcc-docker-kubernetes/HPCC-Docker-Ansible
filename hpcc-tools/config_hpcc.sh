@@ -144,14 +144,15 @@ function get_lb_ips()
   then
     if [ $NUM_ROXIE_LB -gt 0 ] 
     then
-      rm -rf  ${lb_ips}/roxie  
-      touch  ${lb_ips}/roxie  
-      for i in $(seq 1 $NUM_ROXIE_LB)
-      do
-        lb_ip=ROXIE${i}_SERVICE_HOST
-        eval lb_ip=\$$lb_ip
-        [ -n "$lb_ip" ] && echo  ${lb_ip} >> ${lb_ips}/roxie
-      done
+      #rm -rf  ${lb_ips}/roxie  
+      #touch  ${lb_ips}/roxie  
+      #for i in $(seq 1 $NUM_ROXIE_LB)
+      #do
+      #  lb_ip=ROXIE${i}_SERVICE_HOST
+      #  eval lb_ip=\$$lb_ip
+      #  [ -n "$lb_ip" ] && echo  ${lb_ip} >> ${lb_ips}/roxie
+      #done
+      cp /tmp/lb-ips/roxie ${lb_ips}/
     fi
   fi
 
@@ -159,19 +160,21 @@ function get_lb_ips()
   then
     if [ -n "$NUM_THOR_SV" ] && [ $NUM_THOR_SV -gt 0 ] 
     then
-      rm -rf  ${lb_ips}/thor
-      touch  ${lb_ips}/thor
-      for i in $(seq 1 $NUM_THOR_SV)
-      do
-        padded_index=$(printf "%04d" $i)
-        lb_ip=THOR${padded_index}_SERVICE_HOST
-        eval lb_ip=\$$lb_ip
-        [ -n "$lb_ip" ] && echo  ${lb_ip} >> ${lb_ips}/thor
-      done
+      #rm -rf  ${lb_ips}/thor
+      #touch  ${lb_ips}/thor
+      #for i in $(seq 1 $NUM_THOR_SV)
+      #do
+      #  padded_index=$(printf "%04d" $i)
+      #  lb_ip=THOR${padded_index}_SERVICE_HOST
+      #  eval lb_ip=\$$lb_ip
+      #  [ -n "$lb_ip" ] && echo  ${lb_ip} >> ${lb_ips}/thor
+      #done
+      cp /tmp/lb-ips/thor ${lb_ips}/
     fi
   fi
 
-  [ -e ${lb_ips}/esp ] && [ -n "$ESP_SERVICE_HOST" ] && echo  ${ESP_SERVICE_HOST} > ${lb_ips}/esp
+  #[ -e ${lb_ips}/esp ] && [ -n "$ESP_SERVICE_HOST" ] && echo  ${ESP_SERVICE_HOST} > ${lb_ips}/esp
+  [ -e ${lb_ips}/esp ] && [ -n "$ESP_SERVICE_HOST" ] && cp /tmp/lb-ips/esp  ${lb_ips}/
 }
 
 function set_vars_for_envgen()
@@ -232,7 +235,7 @@ function create_envxml_for_esp()
   CONFIG_DIR=/etc/HPCCSystems/esp
   cp  /etc/HPCCSystems/environment.xml ${CONFIG_DIR}/
   if [ -n "$ESP_SERVICE_HOST" ]; then
-    sed  "s/${ESP_SERVICE_HOST}/localhost/g"  /etc/HPCCSystems/environment.xml > ${CONFIG_DIR}/environment.xml
+    sed  "s/${ESP_SERVICE_HOST}/\./g"  /etc/HPCCSystems/environment.xml > ${CONFIG_DIR}/environment.xml
   fi
   chown -R hpcc:hpcc $CONFIG_DIR
 }
@@ -251,7 +254,7 @@ function create_envxml_for_roxie()
     CONFIG_DIR=/etc/HPCCSystems/roxie/${i}
     cur_roxie_lb=ROXIE${i}_SERVICE_HOST 
     eval cur_roxie_lb=\$$cur_roxie_lb
-    sed  "s/${cur_roxie_lb}/localhost/g"  /etc/HPCCSystems/environment.xml > ${CONFIG_DIR}/environment.xml
+    sed  "s/${cur_roxie_lb}/\./g"  /etc/HPCCSystems/environment.xml > ${CONFIG_DIR}/environment.xml
     chown -R hpcc:hpcc $CONFIG_DIR
   done
 }
@@ -309,6 +312,15 @@ collect_ips
 hpcc_config=$(ls /tmp/ips | tr '\n' ',')
 echo "cluster_node_types=${hpcc_config%,}" > /tmp/hpcc.conf
 
+#backup
+[ -d /etc/HPCCSystems/ips ] rm -rf /etc/HPCCSystems/ips 
+cp -r /tmp/ips /etc/HPCCSystems/
+
+[ -d /etc/HPCCSystems/lb-ips ] rm -rf /etc/HPCCSystems/lb-ips 
+cp -r /tmp/lb-ips /etc/HPCCSystems/
+
+cp  /tmp/hpcc.conf /etc/HPCCSystems/
+
 #------------------------------------------
 # Setup Ansible hosts
 #
@@ -338,10 +350,11 @@ create_envxml_with_real_ips
 
 if [ $update -eq 0 ]
 then
-   start_hpcc
+  ansible-playbook /opt/hpcc-tools/ansible/refresh_dali.yaml 
+  start_hpcc
 else
+  ansible-playbook /opt/hpcc-tools/ansible/refresh_dali.yaml 
   ansible-playbook /opt/hpcc-tools/ansible/start_thor.yaml --extra-vars "hosts=dali" 
-  ansible-playbook /opt/hpcc-tools/ansible/refresh_dali.yaml --extra-vars "hosts=dali" 
 fi
 
 
