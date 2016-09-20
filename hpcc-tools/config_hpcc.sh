@@ -174,7 +174,7 @@ function get_lb_ips()
   fi
 
   #[ -e ${lb_ips}/esp ] && [ -n "$ESP_SERVICE_HOST" ] && echo  ${ESP_SERVICE_HOST} > ${lb_ips}/esp
-  [ -e ${lb_ips}/esp ] && [ -n "$ESP_SERVICE_HOST" ] && cp /tmp/lb-ips/esp  ${lb_ips}/
+  [ -e ${lb_ips}/esp ] && [ -s "$/tmp/lb-ips/esp" ] && cp /tmp/lb-ips/esp  ${lb_ips}/
 }
 
 function set_vars_for_envgen()
@@ -234,8 +234,9 @@ function create_envxml_for_esp()
 {
   CONFIG_DIR=/etc/HPCCSystems/esp
   cp  /etc/HPCCSystems/environment.xml ${CONFIG_DIR}/
-  if [ -n "$ESP_SERVICE_HOST" ]; then
-    sed  "s/${ESP_SERVICE_HOST}/\./g"  /etc/HPCCSystems/environment.xml > ${CONFIG_DIR}/environment.xml
+  esp_svc_ip=$(cat ${lb_ips}/esp)
+  if [ -n "$esp_svc_ip" ]; then
+    sed  "s/${esp_svc_ip}/\./g"  /etc/HPCCSystems/environment.xml > ${CONFIG_DIR}/environment.xml
   fi
   chown -R hpcc:hpcc $CONFIG_DIR
 }
@@ -252,9 +253,8 @@ function create_envxml_for_roxie()
   for i in $(seq 1 ${NUM_ROXIE_LB}) 
   do
     CONFIG_DIR=/etc/HPCCSystems/roxie/${i}
-    cur_roxie_lb=ROXIE${i}_SERVICE_HOST 
-    eval cur_roxie_lb=\$$cur_roxie_lb
-    sed  "s/${cur_roxie_lb}/\./g"  /etc/HPCCSystems/environment.xml > ${CONFIG_DIR}/environment.xml
+    roxie_svc_ip=$(cat ${lb_ips}/roxie | head -n ${i} | tail -n 1 )
+    sed  "s/${roxie_svc_ip}/\./g"  /etc/HPCCSystems/environment.xml > ${CONFIG_DIR}/environment.xml
     chown -R hpcc:hpcc $CONFIG_DIR
   done
 }
@@ -264,6 +264,7 @@ function create_envxml_for_roxie()
 #
 SUDOCMD=
 [ $(id -u) -ne 0 ] && SUDOCMD=sudo
+
 
 
 #------------------------------------------
