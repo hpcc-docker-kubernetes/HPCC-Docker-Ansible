@@ -85,7 +85,7 @@ do
   [ ! -e $enabled ] && sleep 2 && continue 
   
   # First time configuration
-  if [ ! -d $ips_dir ]
+  if [ ! -e /etc/HPCCSystems/real/environment.xml ]
   then
     log "Configure HPCC cluster at the frist time ... "
     ${SCRIPT_DIR}/config_hpcc.sh >> $LOG_FILE 2>&1

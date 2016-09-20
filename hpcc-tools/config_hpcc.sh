@@ -174,7 +174,7 @@ function get_lb_ips()
   fi
 
   #[ -e ${lb_ips}/esp ] && [ -n "$ESP_SERVICE_HOST" ] && echo  ${ESP_SERVICE_HOST} > ${lb_ips}/esp
-  [ -e ${lb_ips}/esp ] && [ -s "$/tmp/lb-ips/esp" ] && cp /tmp/lb-ips/esp  ${lb_ips}/
+  [ -e ${lb_ips}/esp ] && [ -s "/tmp/lb-ips/esp" ] && cp /tmp/lb-ips/esp  ${lb_ips}/
 }
 
 function set_vars_for_envgen()
