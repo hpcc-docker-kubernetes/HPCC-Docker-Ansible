@@ -5,4 +5,4 @@
   remote_user: 'root'
   tasks:
      - name: Execute the script
-       command: rm -rf /var/lib/HPCCSystems/myroxie/uslaves
+       command: rm -rf /var/lib/HPCCSystems/myroxie/uslaves; rm -rf /var/lib/HPCCSystems/mythor/uslaves

@@ -34,10 +34,14 @@ function create_envxml()
    [ -z "$esp_nodes" ] && esp_nodes=0
 
    cmd="$SUDOCMD ${HPCC_HOME}/sbin/envgen -env ${CONFIG_DIR}/${ENV_XML_FILE}   \
-       -override roxie,@roxieMulticastEnabled,false -override thor,@replicateOutputs,true \
-       -override esp,@method,htpasswd -override thor,@replicateAsync,true                 \
-       -thornodes ${thor_nodes} -slavesPerNode ${slaves_per_node} -espnodes ${esp_nodes}  \
-       -roxienodes ${roxie_nodes} -supportnodes ${support_nodes} -roxieondemand 1" 
+       -override roxie,@copyResources,true \
+       -override roxie,@roxieMulticastEnabled,false \
+       -override thor,@replicateOutputs,true \
+       -override esp,@method,htpasswd \
+       -override thor,@replicateAsync,true                 \
+       -thornodes ${thor_nodes} -slavesPerNode ${slaves_per_node} \
+       -espnodes ${esp_nodes} -roxienodes ${roxie_nodes} \
+       -supportnodes ${support_nodes} -roxieondemand 1" 
 
     if [ -n "$1" ]
     then
