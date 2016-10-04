@@ -19,6 +19,7 @@ function create_ips_string()
 {
    IPS=
    [ ! -e "$1" ] &&  return
+
    while read ip
    do
       ip=$(echo $ip | sed 's/[[:space:]]//g') 
@@ -203,8 +204,15 @@ function set_vars_for_envgen()
 function create_envxml_with_lb()
 {
   CONFIG_DIR=/etc/HPCCSystems
-  roxie_ips=${lb_ips}/roxie
-  esp_ips=${lb_ips}/esp
+
+  if [ -n "$USE_SVR_IPS" ] &&  [ $USE_SVR_IPS -eq 0 ]   
+  then
+     roxie_ips=/etc/ansible/ips/roxie
+     esp_ips=/etc/ansible/ips/esp
+  else
+     roxie_ips=${lb_ips}/roxie
+     esp_ips=${lb_ips}/esp
+  fi
 
   create_envxml
   chown -R hpcc:hpcc $CONFIG_DIR
@@ -344,14 +352,19 @@ fi
 set_vars_for_envgen
 create_envxml_with_lb
 
-if [ $update -eq 0 ]
+if [ -z "$USE_SVR_IPS" ] ||  [ $USE_SVR_IPS -ne 0 ]   
 then
-  create_envxml_for_roxie
-  create_envxml_for_esp
-  create_envxml_for_thor
-fi
+  if [ $update -eq 0 ]
+  then
+    create_envxml_for_roxie
+    create_envxml_for_esp
+    create_envxml_for_thor
+  fi
 
-create_envxml_with_real_ips
+  create_envxml_with_real_ips
+else
+  ansible-playbook /opt/hpcc-tools/ansible/push_env.yaml --extra-vars "hosts=hpcc" 
+fi
 
 if [ $update -eq 0 ]
 then

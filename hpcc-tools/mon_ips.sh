@@ -69,6 +69,16 @@ touch ${LOG_FILE}
 #set -x
 
 
+if [ -n "$KUBE_PROVIDER" ] && [ "$RUN_PROVIDER_SCRIPT" -eq 1 ]
+then
+  cmd="${SCRIPT_DIR}/providers/$KUBE_PROVIDER" 
+  if [ -e $cmd ]
+  then 
+      echo "run $cmd"
+      eval "$cmd" 
+  fi
+   
+fi
 while [ 1 ]
 do
   sleep 5
@@ -85,9 +95,10 @@ do
   [ ! -e $enabled ] && sleep 2 && continue 
   
   # First time configuration
-  if [ ! -e /etc/HPCCSystems/real/environment.xml ]
+  #if [ ! -e /etc/HPCCSystems/real/environment.xml ]
+  if [ ! -e /etc/ansible/ips ]
   then
-    log "Configure HPCC cluster at the frist time ... "
+    log "Configure HPCC cluster at the first time ... "
     ${SCRIPT_DIR}/config_hpcc.sh >> $LOG_FILE 2>&1
     continue 
   fi
@@ -100,13 +111,28 @@ do
   pod_diff_size=$(ls -s /tmp/pod_ips_diff.txt | cut -d' ' -f1)
   pod_diff_str=$(cat /tmp/pod_ips_diff.txt | grep diff | grep -v -i esp | grep -v -i roxie)
 
-  diff $conf_svc_ips $lbs_dir > /tmp/svc_ips_diff.txt
-  svc_diff_size=$(ls -s /tmp/svc_ips_diff.txt | cut -d' ' -f1)
+  svc_diff_size=0
+  if [ -z "$USE_SVR_IPS" ] ||  [ $USE_SVR_IPS -ne 1 ]
+  then
+    diff $conf_svc_ips $lbs_dir > /tmp/svc_ips_diff.txt
+    svc_diff_size=$(ls -s /tmp/svc_ips_diff.txt | cut -d' ' -f1)
+  fi
 
-  # Re-configure
-  if [ -n "$pod_diff_str" ] || [ $svc_diff_size -ne 0 ]
+  reconfig_hpcc=0
+  if [ -n "$USE_SVR_IPS" ] &&  [ $USE_SVR_IPS -ne 0 ] && [ $pod_diff_size -ne 0 ]
+  then
+    log "IP(s) changed. Re-configure HPCC cluster ... "
+    reconfig_hpcc=1
+  elif [ -n "$pod_diff_str" ] || [ $svc_diff_size -ne 0 ]
   then
     log "Non esp/roxie ip(s) changed. Re-configure HPCC cluster ... "
+    reconfig_hpcc=1
+  fi
+
+
+  # Re-configure
+  if [ $reconfig_hpcc -ne 0 ]
+  then
     ${SCRIPT_DIR}/config_hpcc.sh >> $LOG_FILE 2>&1
   elif [ $pod_diff_size -ne 0 ]
   then
