@@ -1,0 +1,12 @@
+#!/bin/bash
+
+in=/etc/ansible/ansible.cfg
+
+grep -e "^[[:space:]]*ssh_args[[:space:]]*=[[:space:]]*$" $in 
+if [ $? -eq 0 ] 
+then
+   echo "\"ssh_args =\" is already set in $in"
+else
+   echo "Will set \"ssh_args =\" in $in"
+   sed  -i '/^[[:space:]]*\[ssh_connection\][[:space:]]*$/a ssh_args =' $in
+fi

@@ -49,6 +49,28 @@ class ClusterConfig(object):
       elif arg in ("-l", "--svcdir"):
         self.svc_dir = value
 
+  def write_to_file(self, base_dir, comp_type, ip):
+
+      file_name = os.path.join(base_dir, comp_type)
+
+      if os.path.exists(file_name):
+        f_ips  = open (file_name, 'a')
+      else:
+        f_ips  = open (file_name, 'w')
+    
+      f_ips.write(ip + "\n")
+      f_ips.close()
+
+  def clean_dir(self, dir):
+    for f in os.listdir(dir):
+      f_path = os.path.join(dir, f) 
+      try:
+         if os.path.isfile(f_path):
+           os.unlink(f_path)
+      except Exception as e:
+         print(e) 
+        
+
   def group_pod_ips(self):
 
     if not self.pod_fn or not os.path.exists(self.pod_fn): 
@@ -58,57 +80,45 @@ class ClusterConfig(object):
     with open(self.pod_fn) as hpcc_pods:
       data = json.load(hpcc_pods)
 
-    #roxie_ips_file = "roxie_ips.txt"
-    f_dali_ips  = open (os.path.join(self.pod_dir, 'dali'), 'w')
-    f_roxie_ips = open (os.path.join(self.pod_dir, 'roxie'), 'w')
-    f_thor_ips  = open (os.path.join(self.pod_dir, 'thor'), 'w')
-    f_esp_ips   = open (os.path.join(self.pod_dir, 'esp'),  'w')
+    
+    self.clean_dir(self.pod_dir)
+
     for item in data['items']:
       #for c in  item['spec']['containers']:
       #   print c['name']
       if item['metadata']['name'].startswith('roxie'):
-        f_roxie_ips.write(item['status']['podIP'] + "\n")
+        self.write_to_file(self.pod_dir, 'roxie', item['status']['podIP'])
       elif item['metadata']['name'].startswith('thor'):
-        f_thor_ips.write(item['status']['podIP'] + "\n")
+        self.write_to_file(self.pod_dir, 'thor', item['status']['podIP'])
       elif item['metadata']['name'].startswith('esp'):
-        f_esp_ips.write(item['status']['podIP'] + "\n")
+        self.write_to_file(self.pod_dir, 'esp', item['status']['podIP'])
       elif item['metadata']['name'].startswith('dali'):
-        f_dali_ips.write(item['status']['podIP'] + "\n")
-
-    f_dali_ips.close()
-    f_roxie_ips.close()
-    f_thor_ips.close()
-    f_esp_ips.close()
+        self.write_to_file(self.pod_dir,'dali', item['status']['podIP'])
 
   def group_svc_ips(self):
 
     if not self.svc_fn or not os.path.exists(self.svc_fn): 
-      self.usage()
-      exit(1)
+      #self.usage()
+      #exit(1)
+      return
 
     with open(self.svc_fn) as hpcc_services:
       data = json.load(hpcc_services)
 
-    f_dali_ips  = open (os.path.join(self.svc_dir, 'dali'), 'w')
-    f_roxie_ips = open (os.path.join(self.svc_dir, 'roxie'), 'w')
-    f_thor_ips  = open (os.path.join(self.svc_dir, 'thor'), 'w')
-    f_esp_ips   = open (os.path.join(self.svc_dir, 'esp'),  'w')
+    self.clean_dir(self.svc_dir)
+
     for item in data['items']:
       #for c in  item['spec']['containers']:
       #   print c['name']
       if item['metadata']['name'].startswith('roxie'):
-        f_roxie_ips.write(item['spec']['clusterIP'] + "\n")
+        self.write_to_file(self.svc_dir, 'roxie', item['spec']['clusterIP'])
       elif item['metadata']['name'].startswith('thor'):
-        f_thor_ips.write(item['spec']['clusterIP'] + "\n")
+        self.write_to_file(self.svc_dir, 'thor', item['spec']['clusterIP'])
       elif item['metadata']['name'].startswith('esp'):
-        f_esp_ips.write(item['spec']['clusterIP'] + "\n")
+        self.write_to_file(self.svc_dir, 'esp', item['spec']['clusterIP'])
       elif item['metadata']['name'].startswith('dali'):
-        f_dali_ips.write(item['spec']['clusterIP'] + "\n")
+        self.write_to_file(self.svc_dir, 'dali', item['spec']['clusterIP'])
 
-    f_dali_ips.close()
-    f_roxie_ips.close()
-    f_thor_ips.close()
-    f_esp_ips.close()
 
 if __name__ == '__main__':
 
